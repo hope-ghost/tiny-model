@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>tiny-model 训练面板</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei",sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh}
+header{padding:16px 28px;background:#1a1d2e;border-bottom:1px solid #2d3050;
+       display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header h1{font-size:1.15rem;font-weight:600}
+select,input[type=text]{background:#0f1117;border:1px solid #2d3050;color:#e2e8f0;
+       border-radius:8px;padding:7px 10px;font-size:.85rem}
+#status-badge{padding:4px 12px;border-radius:20px;font-size:.78rem;font-weight:600;background:#2d3050;color:#94a3b8}
+#status-badge.running{background:#14532d;color:#4ade80}
+#status-badge.done{background:#1e3a5f;color:#60a5fa}
+main{padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1300px;margin:0 auto}
+.card{background:#1a1d2e;border:1px solid #2d3050;border-radius:12px;padding:20px}
+.card h2{font-size:.9rem;color:#94a3b8;margin-bottom:14px;letter-spacing:.06em}
+canvas{width:100%!important;height:220px;display:block}
+.btn-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+button{padding:8px 18px;border:none;border-radius:8px;cursor:pointer;font-size:.85rem;font-weight:600}
+button:disabled{opacity:.4;cursor:not-allowed}
+.b-green{background:#16a34a;color:#fff}.b-red{background:#dc2626;color:#fff}
+.b-blue{background:#2563eb;color:#fff}.b-purple{background:#7c3aed;color:#fff}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.stat{background:#0f1117;border-radius:8px;padding:12px;text-align:center}
+.stat .val{font-size:1.35rem;font-weight:700}
+.stat .lbl{font-size:.72rem;color:#64748b;margin-top:3px}
+textarea{width:100%;margin-top:6px;background:#0f1117;border:1px solid #2d3050;color:#e2e8f0;
+       border-radius:8px;padding:10px;font-size:.85rem;resize:vertical;min-height:60px}
+#gen-out{white-space:pre-wrap;line-height:1.8;font-size:.88rem;color:#c7d2fe;background:#0f1117;
+       border-radius:8px;padding:14px;min-height:100px;border:1px solid #2d3050;margin-top:10px;
+       max-height:300px;overflow-y:auto}
+.slider-row{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:.8rem;color:#94a3b8}
+.slider-row input{flex:1}
+.warn{color:#f59e0b;font-size:.82rem;margin-top:8px;min-height:18px}
+.file-list{font-size:.82rem;color:#94a3b8;margin-top:10px;max-height:120px;overflow-y:auto}
+.file-list div{padding:3px 0;border-bottom:1px solid #23263a}
+#prep-log{font-family:Consolas,monospace;font-size:.76rem;color:#94a3b8;background:#0f1117;
+       border:1px solid #2d3050;border-radius:8px;padding:10px;margin-top:8px;white-space:pre-wrap;
+       max-height:160px;overflow-y:auto;display:none}
+#prep-log.show{display:block}
+.full-width{grid-column:1/-1}
+.muted{font-size:.82rem;color:#94a3b8;line-height:1.7}
+@media(max-width:700px){main{grid-template-columns:1fr}.full-width{grid-column:1}}
+</style>
+</head>
+<body>
+<header>
+  <h1>tiny-model 训练面板</h1>
+  <label class="muted">项目：
+    <select id="proj-select" onchange="switchProject(this.value)"></select>
+  </label>
+  <input type="text" id="new-proj-name" placeholder="新项目名(字母数字)" style="width:150px">
+  <button class="b-blue" onclick="createProject()">新建项目</button>
+  <span id="status-badge">—</span>
+</header>
+<main>
+  <div class="card full-width">
+    <h2>数据管理</h2>
+    <p class="muted">步骤：① 上传同类小说 txt（可多选、多次追加）② 系统按数据量自动选好模型大小，可微调 ③ 点开始处理。</p>
+    <div class="btn-row">
+      <span class="muted">① 选文件</span>
+      <input type="file" id="file-input" multiple accept=".txt">
+      <button class="b-blue" onclick="uploadFiles()">上传</button>
+    </div>
+    <div id="file-list" class="file-list"></div>
+    <div class="slider-row">② 模型大小
+      <select id="proj-preset" onchange="setPreset(this.value)">
+        <option value="micro">micro (~7M, 适合数据&lt;5MB)</option>
+        <option value="tiny">tiny (~16M, 适合 5-30MB)</option>
+        <option value="small">small (~33M, 适合 30-150MB)</option>
+        <option value="medium">medium (~70M, 适合&gt;150MB)</option>
+      </select>
+      <span id="reco-hint" class="muted"></span>
+    </div>
+    <div class="btn-row">
+      <span class="muted">③</span>
+      <button class="b-green" id="btn-prep" onclick="doPrepare()">开始处理</button>
+    </div>
+    <div id="data-msg" class="warn"></div>
+    <pre id="prep-log"></pre>
+  </div>
+
+  <div class="card full-width">
+    <h2>实时指标</h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="val" id="s-iter">—</div><div class="lbl">当前步数</div></div>
+      <div class="stat"><div class="val" id="s-tloss">—</div><div class="lbl">训练 Loss</div></div>
+      <div class="stat"><div class="val" id="s-vloss">—</div><div class="lbl">验证 Loss</div></div>
+      <div class="stat"><div class="val" id="s-speed">—</div><div class="lbl">ms / iter</div></div>
+    </div>
+  </div>
+  <div class="card"><h2>训练 Loss 曲线</h2><canvas id="c-train"></canvas></div>
+  <div class="card"><h2>验证 Loss 曲线</h2><canvas id="c-val"></canvas></div>
+
+  <div class="card">
+    <h2>训练控制</h2>
+    <p class="muted">处理完数据后即可训练。随时可停，下次从断点续训。验证 loss 连续不降会自动早停。</p>
+    <div class="btn-row">
+      <button class="b-green" id="btn-start" onclick="trainStart()">开始训练</button>
+      <button class="b-red" id="btn-stop" onclick="trainStop()">停止训练</button>
+    </div>
+    <div id="ctrl-msg" class="warn"></div>
+  </div>
+  <div class="card">
+    <h2>模型续写</h2>
+    <textarea id="gen-prompt" placeholder="输入小说开头，或留空让模型自由发挥…" rows="3"></textarea>
+    <div class="slider-row">生成长度
+      <input type="range" id="sl-tokens" min="50" max="500" value="200"
+        oninput="lbl_tokens.textContent=this.value"><span id="lbl_tokens">200</span></div>
+    <div class="slider-row">温度
+      <input type="range" id="sl-temp" min="5" max="15" value="8"
+        oninput="lbl_temp.textContent=(this.value/10).toFixed(1)"><span id="lbl_temp">0.8</span></div>
+    <div class="btn-row"><button class="b-purple" id="btn-gen" onclick="doGenerate()">生成</button></div>
+    <div id="gen-out">（训练一段时间后点生成，看看效果）</div>
+  </div>
+</main>
+<script>
+let currentProject = null;
+
+function drawChart(id, data, color){
+  const cv = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = 220;
+  cv.width = w*dpr; cv.height = h*dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);
+  const pad = {l:48,r:12,t:12,b:24};
+  if(!data.length){ ctx.fillStyle='#475569'; ctx.font='13px sans-serif';
+    ctx.fillText('等待数据…', w/2-30, h/2); return; }
+  const xs=data.map(p=>p.x), ys=data.map(p=>p.y);
+  const xmin=Math.min(...xs), xmax=Math.max(...xs,xmin+1);
+  const ymin=Math.min(...ys), ymax=Math.max(...ys,ymin+0.01);
+  const px=x=>pad.l+(x-xmin)/(xmax-xmin)*(w-pad.l-pad.r);
+  const py=y=>pad.t+(1-(y-ymin)/(ymax-ymin))*(h-pad.t-pad.b);
+  ctx.strokeStyle='#2d3050'; ctx.fillStyle='#64748b'; ctx.font='11px sans-serif';
+  for(let i=0;i<=4;i++){
+    const y=pad.t+i*(h-pad.t-pad.b)/4, val=ymax-(i/4)*(ymax-ymin);
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(w-pad.r,y); ctx.stroke();
+    ctx.fillText(val.toFixed(2), 6, y+4);
+  }
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+  data.forEach((p,i)=>{ i?ctx.lineTo(px(p.x),py(p.y)):ctx.moveTo(px(p.x),py(p.y)); });
+  ctx.stroke();
+  ctx.fillStyle='#64748b';
+  ctx.fillText(xmin, pad.l, h-6); ctx.fillText(xmax, w-pad.r-30, h-6);
+}
+
+async function loadProjects(){
+  const r = await fetch('/api/projects').then(r=>r.json());
+  const sel = document.getElementById('proj-select');
+  const prev = currentProject;
+  sel.innerHTML = '';
+  // 占位项：不预选任何项目，由用户自己挑
+  const ph = document.createElement('option');
+  ph.value = ''; ph.textContent = '— 请选择项目 —';
+  sel.appendChild(ph);
+  r.projects.forEach(p=>{
+    const o = document.createElement('option');
+    o.value = p.name; o.textContent = `${p.name}（${p.preset}, ${p.data_mb}MB）`;
+    sel.appendChild(o);
+  });
+  // 仅当之前已选的项目仍存在时保留选择；否则保持未选中，不自动挑第一个
+  if(prev && r.projects.some(p=>p.name===prev)){
+    currentProject = prev;
+    sel.value = prev;
+    document.getElementById('proj-preset').value =
+      (r.projects.find(p=>p.name===prev)||{}).preset || 'tiny';
+  } else {
+    currentProject = null;
+    sel.value = '';
+  }
+  return r.projects;
+}
+
+async function createProject(){
+  const name = document.getElementById('new-proj-name').value.trim();
+  const r = await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name})}).then(r=>r.json());
+  if(r.ok){ document.getElementById('new-proj-name').value=''; currentProject=r.name;
+    await loadProjects(); document.getElementById('proj-select').value=r.name; refresh(); }
+  else alert(r.msg);
+}
+
+function switchProject(name){
+  currentProject = name || null;
+  // 切项目 = 换整个工作上下文，先清掉上一个项目残留的瞬时 UI
+  document.getElementById('gen-out').textContent = '（训练一段时间后点生成，看看效果）';
+  document.getElementById('gen-prompt').value = '';
+  document.getElementById('data-msg').textContent = '';
+  document.getElementById('ctrl-msg').textContent = '';
+  document.getElementById('file-input').value = '';
+  // 曲线/指标先清空，避免切换瞬间还显示旧项目的图，等 refresh 拉到新数据再填
+  ['s-iter','s-tloss','s-vloss','s-speed'].forEach(id=>
+    document.getElementById(id).textContent='—');
+  refresh();
+}
+
+async function setPreset(preset){
+  if(!currentProject) return;
+  await fetch(`/api/projects/${currentProject}/preset`,{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({preset})});
+}
+
+async function uploadFiles(){
+  if(!currentProject){ alert('请先新建或选择项目'); return; }
+  const inp = document.getElementById('file-input');
+  if(!inp.files.length){ alert('请先选择 txt 文件'); return; }
+  const fd = new FormData();
+  for(const f of inp.files) fd.append('files', f);
+  document.getElementById('data-msg').textContent = '上传中…';
+  const r = await fetch(`/api/projects/${currentProject}/upload`,{method:'POST',body:fd})
+    .then(r=>r.json());
+  if(r.ok){
+    inp.value='';
+    if(r.preset) document.getElementById('proj-preset').value = r.preset;  // 同步自动选好的预设
+    document.getElementById('data-msg').textContent =
+      `已上传 ${r.saved.length} 个文件，已按数据量自动选好模型大小（可在②微调）` +
+      (r.needs_reprocess?'。数据已变，请重新处理并重训':'');
+    refresh();
+  } else document.getElementById('data-msg').textContent = r.msg;
+}
+
+async function doPrepare(){
+  if(!currentProject) return;
+  // 立即禁用按钮，避免 PID 文件写入前的空窗期被重复点击
+  document.getElementById('btn-prep').disabled = true;
+  document.getElementById('data-msg').textContent = '正在启动处理…';
+  const r = await fetch(`/api/projects/${currentProject}/prepare`,{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({project:currentProject})})
+    .then(r=>r.json());
+  if(r.ok){
+    document.getElementById('data-msg').textContent = '处理中：训练分词器 + 编码语料，请稍候…';
+    document.getElementById('prep-log').classList.add('show');
+  } else {
+    document.getElementById('data-msg').textContent = r.msg;
+    document.getElementById('btn-prep').disabled = false;
+  }
+  refresh();
+}
+
+async function pollPrepLog(){
+  if(!currentProject) return;
+  try{
+    const r = await fetch(`/api/projects/${currentProject}/prepare_log`).then(r=>r.json());
+    const box = document.getElementById('prep-log');
+    if(r.ok && r.log){ box.textContent = r.log; box.scrollTop = box.scrollHeight; }
+  }catch(e){}
+}
+
+async function trainStart(){
+  if(!currentProject) return;
+  const r = await fetch('/api/train/start',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({project:currentProject})}).then(r=>r.json());
+  document.getElementById('ctrl-msg').textContent = r.ok ? '训练已启动' : r.msg;
+  refresh();
+}
+async function trainStop(){
+  if(!currentProject) return;
+  const r = await fetch('/api/train/stop',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({project:currentProject})}).then(r=>r.json());
+  document.getElementById('ctrl-msg').textContent = r.ok ? '已发送停止信号' : r.msg;
+  refresh();
+}
+
+async function doGenerate(){
+  if(!currentProject) return;
+  const btn=document.getElementById('btn-gen'), out=document.getElementById('gen-out');
+  btn.disabled=true; out.textContent='生成中…（首次会加载模型，稍等）';
+  try{
+    const body={project:currentProject,prompt:document.getElementById('gen-prompt').value,
+      tokens:+document.getElementById('sl-tokens').value,
+      temp:+document.getElementById('sl-temp').value/10};
+    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)}).then(r=>r.json());
+    out.textContent = r.ok ? r.text : ('出错：'+r.msg);
+  }catch(e){ out.textContent='请求失败：'+e; }
+  btn.disabled=false;
+}
+
+async function refresh(){
+  if(!currentProject){
+    await loadProjects();   // 仍刷新下拉，让新建/别处创建的项目出现在列表里
+    document.getElementById('status-badge').textContent='请从上方选择或新建项目';
+    document.getElementById('file-list').innerHTML='';
+    document.getElementById('reco-hint').textContent='';
+    drawChart('c-train',[], '#4ade80'); drawChart('c-val',[], '#60a5fa');
+    return;
+  }
+  try{
+    const proj = `?project=${encodeURIComponent(currentProject)}`;
+    const [m,s,projs] = await Promise.all([
+      fetch('/api/metrics'+proj).then(r=>r.json()),
+      fetch('/api/status'+proj).then(r=>r.json()),
+      fetch('/api/projects').then(r=>r.json()),
+    ]);
+    // 文件列表 + 预设同步 + 推荐提示
+    const meP = projs.projects.find(p=>p.name===currentProject) || {};
+    const fl = document.getElementById('file-list');
+    fl.innerHTML = (meP.data_files||[]).map(f=>
+      `<div>${f.name} — ${(f.size/1e6).toFixed(1)}MB</div>`).join('') || '<div>（还没有数据，请先上传）</div>';
+    // 下拉框跟随项目已保存的预设
+    if(meP.preset) document.getElementById('proj-preset').value = meP.preset;
+    const hint = document.getElementById('reco-hint');
+    if(!meP.data_mb){
+      hint.textContent = '（上传数据后自动推荐）';
+    } else {
+      const reco = await fetch(`/api/projects/${currentProject}/recommend`).then(r=>r.json());
+      if(reco.ok){
+        const match = reco.preset === meP.preset;
+        hint.textContent = match
+          ? `（${meP.data_mb}MB，已按数据量选 ${reco.preset}）`
+          : `（${meP.data_mb}MB，推荐 ${reco.preset}，当前 ${meP.preset}）`;
+      }
+    }
+    // 曲线
+    drawChart('c-train', m.train.map(p=>({x:p.iter,y:p.loss})), '#4ade80');
+    drawChart('c-val', m.eval.map(p=>({x:p.iter,y:p.val_loss})), '#60a5fa');
+    // 指标卡
+    const last=m.train[m.train.length-1], lastE=m.eval[m.eval.length-1];
+    document.getElementById('s-iter').textContent = last ? (last.iter+(m.meta.total_iters?'/'+m.meta.total_iters:'')):'—';
+    document.getElementById('s-tloss').textContent = last ? last.loss.toFixed(3):'—';
+    document.getElementById('s-vloss').textContent = lastE ? lastE.val_loss.toFixed(3):'—';
+    document.getElementById('s-speed').textContent = last ? last.ms_per_it:'—';
+    // 徽章 + 按钮状态
+    const badge=document.getElementById('status-badge');
+    if(s.preparing){ badge.textContent='● 处理数据中'; badge.className='running'; }
+    else if(s.training){ badge.textContent='● 训练中'; badge.className='running'; }
+    else if(m.done){ badge.textContent='✓ 已完成/早停'; badge.className='done'; }
+    else { badge.textContent='○ 空闲'; badge.className=''; }
+    document.getElementById('btn-start').disabled = s.training || s.preparing || !s.prepared;
+    document.getElementById('btn-stop').disabled = !s.training;
+    document.getElementById('btn-prep').disabled = s.preparing || s.training;
+    document.getElementById('btn-gen').disabled = !s.has_ckpt;
+    // 处理中：持续拉取并显示处理日志
+    if(s.preparing){
+      document.getElementById('prep-log').classList.add('show');
+      pollPrepLog();
+    } else if(document.getElementById('prep-log').classList.contains('show')){
+      // 刚处理完：拉最后一次日志，提示完成
+      pollPrepLog();
+      if(s.prepared)
+        document.getElementById('data-msg').textContent = '处理完成，可以开始训练了';
+    }
+    if(meP.needs_reprocess && !s.preparing)
+      document.getElementById('data-msg').textContent = '数据已变更，请重新处理并重新训练';
+  }catch(e){ /* 后端未就绪，忽略 */ }
+}
+
+(async function init(){
+  await loadProjects();
+  refresh();
+  setInterval(refresh, 2000);
+  window.addEventListener('resize', refresh);
+})();
+</script>
+</body>
+</html>

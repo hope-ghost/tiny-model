@@ -1,0 +1,4 @@
+# PyTorch 需按你的 CUDA 版本单独装（见 README），这里不锁定，避免装成 CPU 版
+tokenizers>=0.15.0   # 训练/加载 BPE 分词器
+numpy>=1.24.0        # token 二进制读写与 memmap
+tqdm>=4.66.0         # 进度条

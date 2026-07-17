@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+.env
+.venv/
+venv/
+
+# IDE / local
+.claude/
+.idea/
+.vscode/
+
+# 用户语料与训练产物（体积大，勿提交）
+projects/*/data/
+projects/*/out/
+
+# 单项目旧目录（若存在）
+data/
+out/
+
+# 模型与二进制数据
+*.pt
+*.bin
+*.pkl
+
+# 日志与进程标记
+*.log
+*.jsonl
+*.pid

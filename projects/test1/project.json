@@ -1,0 +1,10 @@
+{
+  "name": "test1",
+  "preset": "tiny",
+  "preset_auto": true,
+  "created": "new",
+  "data_files": [],
+  "prepared": true,
+  "needs_reprocess": false,
+  "vocab_size": 16000
+}
