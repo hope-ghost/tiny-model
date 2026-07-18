@@ -15,8 +15,9 @@
 | **四档智能预设** | 按语料大小自动推荐 `micro` / `tiny` / `small` / `medium`，防过拟合 |
 | **早停 + 断点续训** | 验证 loss 不再改善自动停；随时中断，下次接着训 |
 | **中文 BPE 分词** | 自动学字词组合，无需自己造词表 |
+| **现代小模型架构** | RoPE 位置编码 + RMSNorm + SwiGLU + GQA，收敛更稳、更省显存 |
 | **省显存设计** | bf16、梯度累积、memmap 读数据；默认设置约 2～5 GB 即可训 |
-| **代码精简可读** | GPT-2 结构，核心就 `model.py` + `train.py`，方便学习和改 |
+| **代码精简可读** | 核心就 `model.py` + `train.py`，方便学习和改 |
 
 ---
 
@@ -167,10 +168,13 @@ python migrate_to_projects.py
 ## 技术栈
 
 - PyTorch + bf16 混合精度
+- 现代小模型架构：**RoPE**（旋转位置编码）、**RMSNorm**、**SwiGLU** 前馈、**GQA**（分组查询注意力）
 - AdamW、余弦退火学习率、梯度累积与裁剪
 - Flash Attention（`scaled_dot_product_attention`）
 - HuggingFace `tokenizers`（BPE）
 - Flask 面板
+
+> 架构说明：早期版本为 GPT-2 经典结构（绝对位置嵌入 + LayerNorm + GELU + MHA），现已升级为上述现代组件。若你有旧版本训练的 `ckpt.pt`，结构不兼容，需删除后重新训练（`train.py` 会自动检测并提示）。
 
 ---
 

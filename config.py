@@ -17,12 +17,13 @@ from dataclasses import dataclass
 PRESET = "tiny"   # micro / tiny / small / medium
 # ====================================
 
-# 每档预设：(层数, 头数, 维度, dropout)。数据越少 → 模型越小、dropout越大
+# 每档预设：(层数, Q头数, KV头数, 维度, dropout)。数据越少 → 模型越小、dropout越大
+# n_kv_head < n_head 即启用 GQA（多个 Q 头共享 KV），省显存；n_head 须能被 n_kv_head 整除
 PRESETS = {
-    "micro":  dict(n_layer=4, n_head=4, n_embd=256, dropout=0.2),
-    "tiny":   dict(n_layer=6, n_head=6, n_embd=384, dropout=0.2),
-    "small":  dict(n_layer=8, n_head=8, n_embd=512, dropout=0.1),
-    "medium": dict(n_layer=12, n_head=10, n_embd=640, dropout=0.1),
+    "micro":  dict(n_layer=4, n_head=4, n_kv_head=2, n_embd=256, dropout=0.2),
+    "tiny":   dict(n_layer=6, n_head=6, n_kv_head=2, n_embd=384, dropout=0.2),
+    "small":  dict(n_layer=8, n_head=8, n_kv_head=4, n_embd=512, dropout=0.1),
+    "medium": dict(n_layer=12, n_head=10, n_kv_head=2, n_embd=640, dropout=0.1),
 }
 
 
@@ -32,9 +33,10 @@ class ModelConfig:
     block_size: int = 512     # 上下文长度（一次能看多少个 token）
     n_layer: int = PRESETS[PRESET]["n_layer"]
     n_head: int = PRESETS[PRESET]["n_head"]
+    n_kv_head: int = PRESETS[PRESET]["n_kv_head"]   # GQA 的 KV 头数（< n_head 即启用）
     n_embd: int = PRESETS[PRESET]["n_embd"]
     dropout: float = PRESETS[PRESET]["dropout"]
-    bias: bool = False        # 线性层/LayerNorm 是否用 bias，False 更快更稳
+    bias: bool = False        # 线性层是否用 bias，False 更快更稳（RMSNorm 无 bias）
 
 
 @dataclass
@@ -103,6 +105,7 @@ def apply_preset(preset_name):
     p = PRESETS[preset_name]
     model_config.n_layer = p["n_layer"]
     model_config.n_head = p["n_head"]
+    model_config.n_kv_head = p["n_kv_head"]
     model_config.n_embd = p["n_embd"]
     model_config.dropout = p["dropout"]
 

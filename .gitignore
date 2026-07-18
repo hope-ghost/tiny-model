@@ -12,9 +12,8 @@ venv/
 .idea/
 .vscode/
 
-# 用户语料与训练产物（体积大，勿提交）
-projects/*/data/
-projects/*/out/
+# 用户项目（语料、训练产物、项目元信息，均为本地内容，勿提交）
+projects/
 
 # 单项目旧目录（若存在）
 data/
