@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 echo ============================================
-echo   tiny-model dashboard
+echo   tiny-novel-gpt dashboard
 echo ============================================
 echo.
 echo Starting dashboard server...

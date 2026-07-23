@@ -1,4 +1,4 @@
-# tiny-model：本地训练中文小说续写模型
+# tiny-novel-gpt：本地训练中文小说续写模型
 
 在本地 NVIDIA 显卡上，从零训练一个 **7M～70M 参数** 的小 GPT，投喂你自己的小说 txt，看它学着续写。
 
@@ -103,7 +103,7 @@ python generate.py --prompt "夜色渐深，" --tokens 300 --temp 0.8
 ## 项目结构
 
 ```
-tiny-model/
+tiny-novel-gpt/
 ├── dashboard.py          # 面板后端
 ├── dashboard.html        # 面板前端
 ├── config.py             # 全局超参与预设定义
